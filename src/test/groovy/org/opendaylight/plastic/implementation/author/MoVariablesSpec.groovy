@@ -23,6 +23,13 @@ import org.opendaylight.plastic.implementation.PlasticException
 import spock.lang.Specification
 
 class MoVariablesSpec extends Specification {
+
+    def removeIterators(Map bindings) {
+        bindings.findAll { k,v ->
+            !k.startsWith('_')
+        }
+    }
+
     def "morpher variables can be empty"() {
         given:
         MoVariables instance = new MoVariables([:])
@@ -62,16 +69,52 @@ class MoVariablesSpec extends Specification {
         when:
         MoArray slice = instance.asArray("a[*]")
         then:
-        slice.size() == 2
+        slice.size() == 4
     }
 
-    def "morpher array can include everything"() {
+    def "morpher array size must count holes too"() {
         given:
-        MoVariables instance = new MoVariables(['a[0]': 11, 'a[1]': 33, 'a[5]': 'abc'])
+        int size = 6
+        MoVariables instance = new MoVariables(['a[0]': 11, 'a[1]': 33, 'a[5]': 'abc', '_[a[*]]': "[$size]"])
         when:
         MoArray slice = instance.asArray("a[*]")
         then:
-        slice.size() == instance.size()
+        slice.size() == size
+    }
+
+    def "morpher array must include holes in iterating"() {
+        given:
+        List expected = [ null, 11, 33, null, null, 'abc' ]
+        MoVariables instance = new MoVariables(['a[1]': expected[1],
+                                                'a[2]': expected[2],
+                                                'a[5]': expected[5],
+                                                '_[a[*]]': "[${expected.size()}]"])
+        when:
+        MoArray slice = instance.asArray("a[*]")
+        then:
+        for (int i = 0; i< slice.size(); i++) {
+            slice[i] == expected[i]
+        }
+    }
+
+    def "morpher array doublet test case of [ hole, non-hole ]"() {
+        given:
+        MoVariables instance = new MoVariables(['a[1]': 'abc', '_[a[*]]': "[2]"])
+        when:
+        MoArray slice = instance.asArray("a[*]")
+        then:
+        slice[0] == null
+        slice[1] == 'abc'
+    }
+
+    def "missing iterator is added"() {
+        given:
+        Map bindings = ['a[0]': 11, 'a[1]': 33, 'a[5]': 'abc']
+        MoVariables instance = new MoVariables(bindings)
+        when:
+        instance.asArray("a[*]")
+        then:
+        bindings.size() == old(bindings.size())+1
     }
 
     def "morpher array must use a generic indexed variable or an error results"() {
@@ -89,19 +132,19 @@ class MoVariablesSpec extends Specification {
         when:
         List slices = instance.asArrays("a[*]","b[*]","c[*]")
         then:
-        slices.collect { MoArray mv -> mv.size() } == [2, 1, 1]
+        slices.collect { MoArray mv -> mv.size() } == [2, 6, 46]
     }
 
-    def "morpher array can access in the right order"() {
+    def "morpher array can access values in order even with holes"() {
         given:
-        MoArray instance = new MoArray("a[*]", ['a[55]': 'a55', 'a[0]': 'a0', 'a[1]': 'a1', 'b[5]': 'b5', 'a[2]': 'a2', 'a[10]': 'a10'])
+        MoArray instance = new MoArray("a[*]", ['a[7]': 'a7', 'a[0]': 'a0', 'a[1]': 'a1', 'b[5]': 'b5', 'a[2]': 'a2', 'a[9]': 'a9'])
         List found = []
         when:
-        (0..4).each { i ->
+        (0..9).each { i ->
             found << instance[i]
         }
         then:
-        found == ['a0', 'a1', 'a2', 'a10', 'a55']
+        found == ['a0', 'a1', 'a2', null, null, null, null, 'a7', null, 'a9']
     }
 
     def "morpher array can be set"() {
@@ -138,7 +181,7 @@ class MoVariablesSpec extends Specification {
         when:
         instance.set(['0', '1', '2', '3', '4'])
         then:
-        original == ['a[0]': '0', 'a[1]': '1', 'a[2]': '2', 'a[3]': '3', 'a[4]': '4']
+        removeIterators(original) == ['a[0]': '0', 'a[1]': '1', 'a[2]': '2', 'a[3]': '3', 'a[4]': '4']
     }
 
     def "morpher array can be set to empty"() {
@@ -158,7 +201,7 @@ class MoVariablesSpec extends Specification {
         when:
         instance.set([])
         then:
-        original == [:]
+        removeIterators(original) == [:]
     }
 
     def "setting a morpher array item can be set (and affects original)"() {
@@ -282,6 +325,6 @@ class MoVariablesSpec extends Specification {
         expect:
         (0..2).each { i -> instance[i] = "${i+10}" }
         and:
-        underlying == ['a[0]':  '10', 'a[1]':  '11', 'a[2]':  '12']
+        removeIterators(underlying) == ['a[0]':  '10', 'a[1]':  '11', 'a[2]':  '12']
     }
 }

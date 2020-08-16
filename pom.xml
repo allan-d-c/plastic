@@ -4,7 +4,7 @@
 
   <groupId>org.opendaylight.plastic</groupId>
   <artifactId>odl-plastic</artifactId>
-  <version>2.1.7-SNAPSHOT</version>
+  <version>2.2.3-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>odl-plastic</name>
@@ -75,6 +75,12 @@
     <plastic.runner.dir>plasticrunner</plastic.runner.dir>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
+    <jacoco.destFile>${project.build.directory}/code-coverage/jacoco.exec</jacoco.destFile>
+    <jacoco.dataFile>${jacoco.destFile}</jacoco.dataFile>
+    <sonar-jacoco-listeners.version>3.8</sonar-jacoco-listeners.version>
+    <sonar.core.codeCoveragePlugin>jacoco</sonar.core.codeCoveragePlugin>
+    <sonar.jacoco.reportPath>${jacoco.destFile}</sonar.jacoco.reportPath>
+    <sonar.jacoco.itReportPath>${project.build.directory}/code-coverage/jacoco-it.exec</sonar.jacoco.itReportPath>
   </properties>
 
   <dependencies>
@@ -299,7 +305,25 @@
           </execution>
         </executions>
       </plugin>
-
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.5</version>
+        <executions>
+          <execution>
+            <id>pre-unit-test</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-assembly-plugin</artifactId>
@@ -317,6 +341,7 @@
                 <descriptorRef>jar-with-dependencies</descriptorRef>
               </descriptorRefs>
               <finalName>${project.artifactId}-${project.version}-runner</finalName>
+              <attach>false</attach>
             </configuration>
             <goals>
               <goal>single</goal>
@@ -329,7 +354,7 @@
               <descriptors>
                 <descriptor>src/assembly/plastic_runner.xml</descriptor>
               </descriptors>
-              <finalName>${plastic.runner.dir}</finalName>
+              <attach>true</attach>
             </configuration>
             <goals>
               <goal>single</goal>

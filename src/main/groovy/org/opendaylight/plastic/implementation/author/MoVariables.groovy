@@ -10,7 +10,7 @@
 
 package org.opendaylight.plastic.implementation.author
 
-
+import org.opendaylight.plastic.implementation.Schemiterator
 import org.opendaylight.plastic.implementation.Variables
 import org.opendaylight.plastic.implementation.PlasticException
 
@@ -112,6 +112,10 @@ class MoVariables {
     boolean containsKey(String key) {
         bindings.containsKey(key)
     }
+
+    String dump() {
+        bindings.toMapString()
+    }
 }
 
 class MoArray {
@@ -137,6 +141,9 @@ class MoArray {
     private Map bindings
     private Set keys
     private String sliceName
+    private Schemiterator iterator
+
+    // TODO: i don't believe that we need lazyOrderedKeys anymore after using sizeFromKeys() - remove it
 
     private List<String> lazyOrderedKeys = []
     private List<Object> lazyOrderedValues = []
@@ -147,6 +154,42 @@ class MoArray {
         this.sliceName = variable
         this.bindings = varBindings
         this.keys = variables.matches(bindings, variable)
+
+        ensureIterator()
+    }
+
+    private void ensureIterator() {
+        if (Schemiterator.hasSpec(sliceName, bindings)) {
+            iterator = new Schemiterator(sliceName)
+            iterator.readSpecFrom(bindings)
+        }
+        else
+            updateIterator()
+    }
+
+    // Only support for single dimension - if more wanted, then client
+    // must write ad hoc logic
+    //
+    // For older client logic, make sure there is an iterator spec in the
+    // bindings, or none of the array logic will work
+    //
+    private void updateIterator() {
+        iterator = new Schemiterator(sliceName, sizeFromKeys(keys))
+        iterator.writeSpecTo(bindings)
+    }
+
+    private int sizeFromKeys(Set<String> theKeys) {
+        int largestFoundIndex = -1
+        for (String key : theKeys) {
+            int index = Variables.extractIndexAsInt(key, -1)
+            if (index > largestFoundIndex)
+                largestFoundIndex = index
+        }
+        largestFoundIndex == -1 ? 0 : (largestFoundIndex+1)
+    }
+
+    String getName() {
+        sliceName
     }
 
     List orderedKeys() {
@@ -158,10 +201,17 @@ class MoArray {
 
     List orderedValues() {
         if (lazyOrderedValues.isEmpty()) {
-            List okeys = orderedKeys()
-            this.lazyOrderedValues = okeys.collect { k -> bindings[k] }
+            int len = size()
+            for (int i = 0; i< len; i++) {
+                String key = Variables.generateAsIndexed(sliceName, i)
+                lazyOrderedValues.add(bindings[key])
+            }
         }
         lazyOrderedValues
+    }
+
+    List values() {
+        orderedValues()
     }
 
     boolean isEmpty() {
@@ -169,7 +219,7 @@ class MoArray {
     }
 
     int size() {
-        keys.size()
+        iterator.size()
     }
 
     /**
@@ -198,17 +248,23 @@ class MoArray {
         keys.each { k -> bindings.remove(k) }
         keys.clear()
         lazyOrderedKeys.clear()
-        lazyOrderedKeys.clear()
+        lazyOrderedValues.clear()
 
         for (int i = 0; i< values.size(); i++) {
             bindings.put(newVars[i], values[i])
             keys.add(newVars[i])
         }
+
+        updateIterator()
     }
 
     void add(Object value) {
         int size = bindings.size();
+        size-- // do not count the iterator
         forcePutAt(size, value)
+
+        iterator = new Schemiterator(sliceName, keys.size())
+        iterator.writeSpecTo(bindings)
     }
 
     private void throwIfInvalidIndex(int index) {
@@ -228,4 +284,16 @@ class MoArray {
         keys.add(newVar)
     }
 
+    String dump() {
+        StringBuilder sb = new StringBuilder()
+        int len = size()
+        for (int i = 0; i< len; i++) {
+            if (sb.size() != 0)
+                sb.append(', ')
+            sb.append(getAt(i)?.toString())
+        }
+        sb.append((sb.size() == 0) ? ']' : ' ]')
+        sb.insert(0, "$sliceName [ ")
+        sb.toString()
+    }
 }
